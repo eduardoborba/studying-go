@@ -7,127 +7,103 @@ import (
 	"net/http"
 	"io/ioutil"
 
-	"github.com/go-pg/pg/v10"
-    "github.com/go-pg/pg/v10/orm"
 	"github.com/gorilla/mux"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type Article struct {
-	Id      string `json:"Id"`
-    Title string `json:"Title"`
-    Desc string `json:"desc"`
-    Content string `json:"content"`
+	gorm.Model
+    Title string
+    Desc string
+    Content string
 }
 
-var Articles []Article
+var db *gorm.DB
+var err error
 
 func homePage(w http.ResponseWriter, r *http.Request){
     fmt.Fprintf(w, "Welcome to the HomePage!")
     fmt.Println("Endpoint Hit: homePage")
 }
 
-func returnAllArticles(w http.ResponseWriter, r *http.Request){
-    fmt.Println("Endpoint Hit: returnAllArticles")
-    json.NewEncoder(w).Encode(Articles)
+func getArticles(w http.ResponseWriter, r *http.Request){
+	fmt.Println("Endpoint Hit: getArticles")
+	var articles []Article
+	
+	db.Find(&articles)
+    
+	json.NewEncoder(w).Encode(&articles)
 }
 
-func returnSingleArticle(w http.ResponseWriter, r *http.Request){
-    vars := mux.Vars(r)
-    key := vars["id"]
+func getArticle(w http.ResponseWriter, r *http.Request){
+    params := mux.Vars(r)
+	var article Article
 
-    for _, article := range Articles {
-        if article.Id == key {
-            json.NewEncoder(w).Encode(article)
-        }
-    }
+	db.First(&article, params["id"])
+
+    json.NewEncoder(w).Encode(&article)
 }
 
-func createNewArticle(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: createNewArticle")
+func createArticle(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Endpoint Hit: createArticle")
     reqBody, _ := ioutil.ReadAll(r.Body)
     var article Article 
 	json.Unmarshal(reqBody, &article)
 	
-	Articles = append(Articles, article)
+	db.Create(&article)
 
     json.NewEncoder(w).Encode(article)
 }
 
 func deleteArticle(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint Hit: deleteArticle")
-    vars := mux.Vars(r)
-    id := vars["id"]
-
-    for index, article := range Articles {
-        if article.Id == id {
-            Articles = append(Articles[:index], Articles[index+1:]...)
-        }
-    }
+    params := mux.Vars(r)
+	var article Article
+	
+	db.First(&article, params["id"])
+	db.Delete(&article)
+	  
+	json.NewEncoder(w).Encode(&article)
 }
 
 func updateArticle(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint Hit: updateArticle")
-	vars := mux.Vars(r)
-    id := vars["id"]
+	params := mux.Vars(r)
 	reqBody, _ := ioutil.ReadAll(r.Body)
 	var updatedArticle Article 
+	var article Article
 	json.Unmarshal(reqBody, &updatedArticle)
 
-	for index, article := range Articles {
-        if article.Id == id {
-			updatedArticle.Id = article.Id
-			Articles[index] = updatedArticle
-        }
-	}
-	
-	json.NewEncoder(w).Encode(updatedArticle)
+	db.First(&article, params["id"])
+	db.Model(&article).Updates(updatedArticle)
+
+	json.NewEncoder(w).Encode(article)
 }
 
 func handleRequests() {
-	myRouter := mux.NewRouter().StrictSlash(true)
-	myRouter.HandleFunc("/", homePage).Methods("GET")
-	myRouter.HandleFunc("/articles", returnAllArticles).Methods("GET")
-	myRouter.HandleFunc("/articles", createNewArticle).Methods("POST")
-	myRouter.HandleFunc("/articles/{id}", updateArticle).Methods("PUT")
-	myRouter.HandleFunc("/articles/{id}", returnSingleArticle).Methods("GET")
-	myRouter.HandleFunc("/articles/{id}", deleteArticle).Methods("DELETE")
-    log.Fatal(http.ListenAndServe(":10000", myRouter))
+	router := mux.NewRouter().StrictSlash(true)
+	router.HandleFunc("/", homePage).Methods("GET")
+	router.HandleFunc("/articles", getArticles).Methods("GET")
+	router.HandleFunc("/articles", createArticle).Methods("POST")
+	router.HandleFunc("/articles/{id}", updateArticle).Methods("PUT")
+	router.HandleFunc("/articles/{id}", getArticle).Methods("GET")
+	router.HandleFunc("/articles/{id}", deleteArticle).Methods("DELETE")
+	
+	log.Fatal(http.ListenAndServe(":10000", router))
 }
 
 func main() {
-	Articles = []Article{
-        Article{Id: "1", Title: "Hello", Desc: "Article Description", Content: "Article Content"},
-        Article{Id: "2", Title: "Hello 2", Desc: "Article Description", Content: "Article Content"},
+	dsn := "host=localhost port=5432 user=eduardoborba dbname=go-rest-api sslmode=disable password=password"
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect database")
 	}
-	// initDb()
-    handleRequests()	
-}
 
-func initDb() {
-	db := pg.Connect(&pg.Options{
-		User: "eduardoborba",
-		Password: "password",
-		Database: "go-rest-api",
-    })
-    defer db.Close()
-
-    err := createSchema(db)
-    if err != nil {
-        panic(err)
-    }
-}
-
-
-func createSchema(db *pg.DB) error {
-    models := []interface{}{
-        (*Article)(nil),
-    }
-
-    for _, model := range models {
-        err := db.Model(model).CreateTable(&orm.CreateTableOptions{})
-        if err != nil {
-            return err
-        }
-    }
-    return nil
+	err = db.AutoMigrate(&Article{})
+	if err != nil {
+		fmt.Println("Error HandleMigrate:" + err.Error())
+	}
+	
+	handleRequests()	
 }
