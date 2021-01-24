@@ -1,109 +1,116 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-
-	"github.com/gorilla/mux"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"os"
 )
 
-type Article struct {
-	gorm.Model
-	Title   string
-	Desc    string
-	Content string
-}
+// func homePage(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Fprintf(w, "Welcome to the HomePage!")
+// 	fmt.Println("Endpoint Hit: homePage")
+// }
 
-var db *gorm.DB
-var err error
+// func getArticles(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Println("Endpoint Hit: getArticles")
+// 	var articles []Article
 
-func homePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to the HomePage!")
-	fmt.Println("Endpoint Hit: homePage")
-}
+// 	a.DB.Find(&articles)
 
-func getArticles(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: getArticles")
-	var articles []Article
+// 	json.NewEncoder(w).Encode(&articles)
+// }
 
-	db.Find(&articles)
+// func getArticle(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Println("Endpoint Hit: getArticle")
+// 	params := mux.Vars(r)
+// 	var article Article
 
-	json.NewEncoder(w).Encode(&articles)
-}
+// 	err := a.DB.First(&article, params["id"])
 
-func getArticle(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	var article Article
+// 	if err == nil {
+// 		json.NewEncoder(w).Encode(&article)
+// 	} else {
+// 		handleNotFound(w)
+// 	}
+// }
 
-	db.First(&article, params["id"])
+// func createArticle(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Println("Endpoint Hit: createArticle")
+// 	fmt.Println(r.Body)
+// 	reqBody, _ := ioutil.ReadAll(r.Body)
+// 	var article Article
+// 	json.Unmarshal(reqBody, &article)
 
-	json.NewEncoder(w).Encode(&article)
-}
+// 	result := a.DB.Create(&article)
+// 	if result.Error == nil {
+// 		json.NewEncoder(w).Encode(&article)
+// 	} else {
+// 		w.WriteHeader(422)
+// 		json.NewEncoder(w).Encode(&err)
+// 	}
+// }
 
-func createArticle(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: createArticle")
-	reqBody, _ := ioutil.ReadAll(r.Body)
-	var article Article
-	json.Unmarshal(reqBody, &article)
+// func deleteArticle(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Println("Endpoint Hit: deleteArticle")
+// 	params := mux.Vars(r)
+// 	var article Article
 
-	db.Create(&article)
+// 	a.DB.First(&article, params["id"])
+// 	a.DB.Delete(&article)
 
-	json.NewEncoder(w).Encode(article)
-}
+// 	json.NewEncoder(w).Encode(&article)
+// }
 
-func deleteArticle(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: deleteArticle")
-	params := mux.Vars(r)
-	var article Article
+// func updateArticle(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Println("Endpoint Hit: updateArticle")
+// 	params := mux.Vars(r)
+// 	reqBody, _ := ioutil.ReadAll(r.Body)
+// 	var updatedArticle Article
+// 	var article Article
+// 	json.Unmarshal(reqBody, &updatedArticle)
 
-	db.First(&article, params["id"])
-	db.Delete(&article)
+// 	a.DB.First(&article, params["id"])
+// 	a.DB.Model(&article).Updates(updatedArticle)
 
-	json.NewEncoder(w).Encode(&article)
-}
+// 	json.NewEncoder(w).Encode(article)
+// }
 
-func updateArticle(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: updateArticle")
-	params := mux.Vars(r)
-	reqBody, _ := ioutil.ReadAll(r.Body)
-	var updatedArticle Article
-	var article Article
-	json.Unmarshal(reqBody, &updatedArticle)
+// func handleNotFound(w http.ResponseWriter) {
+// 	w.WriteHeader(404)
 
-	db.First(&article, params["id"])
-	db.Model(&article).Updates(updatedArticle)
+// 	data := make(map[string]string)
+// 	data["error_code"] = "Not Found"
+// 	json.NewEncoder(w).Encode(&data)
+// }
 
-	json.NewEncoder(w).Encode(article)
-}
+// func handleRequests() {
+// 	router := mux.NewRouter().StrictSlash(true)
+// 	router.HandleFunc("/", homePage).Methods("GET")
+// 	router.HandleFunc("/articles", getArticles).Methods("GET")
+// 	router.HandleFunc("/articles", createArticle).Methods("POST")
+// 	router.HandleFunc("/articles/{id}", updateArticle).Methods("PUT")
+// 	router.HandleFunc("/articles/{id}", getArticle).Methods("GET")
+// 	router.HandleFunc("/articles/{id}", deleteArticle).Methods("DELETE")
 
-func handleRequests() {
-	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", homePage).Methods("GET")
-	router.HandleFunc("/articles", getArticles).Methods("GET")
-	router.HandleFunc("/articles", createArticle).Methods("POST")
-	router.HandleFunc("/articles/{id}", updateArticle).Methods("PUT")
-	router.HandleFunc("/articles/{id}", getArticle).Methods("GET")
-	router.HandleFunc("/articles/{id}", deleteArticle).Methods("DELETE")
-
-	log.Fatal(http.ListenAndServe(":10000", router))
-}
+// 	log.Fatal(http.ListenAndServe(":10000", router))
+// }
 
 func main() {
-	dsn := "host=localhost port=5432 user=eduardoborba dbname=go-rest-api sslmode=disable password=password"
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic("failed to connect database")
-	}
+	// dsn := "host=localhost port=5432 user=eduardoborba dbname=go-rest-api sslmode=disable password=password"
+	// db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// if err != nil {
+	// 	panic("failed to connect database")
+	// }
 
-	err = db.AutoMigrate(&Article{})
-	if err != nil {
-		fmt.Println("Error HandleMigrate:" + err.Error())
-	}
+	// err = a.DB.AutoMigrate(&Article{})
+	// if err != nil {
+	// 	fmt.Println("Error HandleMigrate:" + err.Error())
+	// }
 
-	handleRequests()
+	// handleRequests()
+	a := App{}
+	a.Initialize(
+		os.Getenv("APP_DB_USERNAME"),
+		os.Getenv("APP_DB_PASSWORD"),
+		os.Getenv("APP_DB_NAME"))
+
+	a.Run(":10000")
 }
