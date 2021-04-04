@@ -1,22 +1,31 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"log"
-	"net/http"
-	"net/http/httptest"
 	"os"
+	"testing"   
+	"log"
+	"bytes"
 	"strconv"
-	"testing"
+
+	"encoding/json"
+	"net/http/httptest"
+	"net/http"
+
+	"github.com/joho/godotenv"
 )
 
 var a App
 
+
 func TestMain(m *testing.M) {
+	err := godotenv.Load(".env")
+
+	if err != nil {
+	  log.Fatalf("Error loading .env file")
+	}
+
 	a.Initialize(
 		os.Getenv("APP_DB_USERNAME"),
-		os.Getenv("APP_DB_PASSWORD"),
 		os.Getenv("APP_DB_NAME"))
 
 	ensureTableExists()
@@ -25,16 +34,143 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestEmptyTable(t *testing.T) {
+	clearTable()
+
+	req, _ := http.NewRequest("GET", "/products", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusOK, response.Code)
+
+	if body := response.Body.String(); body != "[]" {
+			t.Errorf("Expected an empty array. Got %s", body)
+	}
+}
+
+func TestGetNonExistentProduct(t *testing.T) {
+	clearTable()
+
+	req, _ := http.NewRequest("GET", "/product/11", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusNotFound, response.Code)
+
+	var m map[string]string
+	json.Unmarshal(response.Body.Bytes(), &m)
+	if m["error"] != "Product not found" {
+			t.Errorf("Expected the 'error' key of the response to be set to 'Product not found'. Got '%s'", m["error"])
+	}
+}
+
+func TestCreateProduct(t *testing.T) {
+
+	clearTable()
+
+	var jsonStr = []byte(`{"name":"test product", "price": 11.22}`)
+	req, _ := http.NewRequest("POST", "/product", bytes.NewBuffer(jsonStr))
+	req.Header.Set("Content-Type", "application/json")
+
+	response := executeRequest(req)
+	checkResponseCode(t, http.StatusCreated, response.Code)
+
+	var m map[string]interface{}
+	json.Unmarshal(response.Body.Bytes(), &m)
+
+	if m["name"] != "test product" {
+			t.Errorf("Expected product name to be 'test product'. Got '%v'", m["name"])
+	}
+
+	if m["price"] != 11.22 {
+			t.Errorf("Expected product price to be '11.22'. Got '%v'", m["price"])
+	}
+
+	// the id is compared to 1.0 because JSON unmarshaling converts numbers to
+	// floats, when the target is a map[string]interface{}
+	if m["id"] != 1.0 {
+			t.Errorf("Expected product ID to be '1'. Got '%v'", m["id"])
+	}
+}
+
+func TestGetProduct(t *testing.T) {
+	clearTable()
+	addProducts(1)
+
+	req, _ := http.NewRequest("GET", "/product/1", nil)
+	response := executeRequest(req)
+
+	checkResponseCode(t, http.StatusOK, response.Code)
+}
+
+func TestUpdateProduct(t *testing.T) {
+
+	clearTable()
+	addProducts(1)
+
+	req, _ := http.NewRequest("GET", "/product/1", nil)
+	response := executeRequest(req)
+	var originalProduct map[string]interface{}
+	json.Unmarshal(response.Body.Bytes(), &originalProduct)
+
+	var jsonStr = []byte(`{"name":"test product - updated name", "price": 11.22}`)
+	req, _ = http.NewRequest("PUT", "/product/1", bytes.NewBuffer(jsonStr))
+	req.Header.Set("Content-Type", "application/json")
+
+	response = executeRequest(req)
+
+	checkResponseCode(t, http.StatusOK, response.Code)
+
+	var m map[string]interface{}
+	json.Unmarshal(response.Body.Bytes(), &m)
+
+	if m["id"] != originalProduct["id"] {
+			t.Errorf("Expected the id to remain the same (%v). Got %v", originalProduct["id"], m["id"])
+	}
+
+	if m["name"] == originalProduct["name"] {
+			t.Errorf("Expected the name to change from '%v' to '%v'. Got '%v'", originalProduct["name"], m["name"], m["name"])
+	}
+
+	if m["price"] == originalProduct["price"] {
+			t.Errorf("Expected the price to change from '%v' to '%v'. Got '%v'", originalProduct["price"], m["price"], m["price"])
+	}
+}
+
+func TestDeleteProduct(t *testing.T) {
+	clearTable()
+	addProducts(1)
+
+	req, _ := http.NewRequest("GET", "/product/1", nil)
+	response := executeRequest(req)
+	checkResponseCode(t, http.StatusOK, response.Code)
+
+	req, _ = http.NewRequest("DELETE", "/product/1", nil)
+	response = executeRequest(req)
+
+	checkResponseCode(t, http.StatusOK, response.Code)
+
+	req, _ = http.NewRequest("GET", "/product/1", nil)
+	response = executeRequest(req)
+	checkResponseCode(t, http.StatusNotFound, response.Code)
+}
+
 func ensureTableExists() {
-	if err := a.DB.AutoMigrate(); err != nil {
+	if _, err := a.DB.Exec(tableCreationQuery); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func clearTable() {
-	a.DB.Exec("DELETE FROM articles")
-	a.DB.Exec("ALTER SEQUENCE articles_id_seq RESTART WITH 1")
+	a.DB.Exec("DELETE FROM products")
+	a.DB.Exec("ALTER SEQUENCE products_id_seq RESTART WITH 1")
 }
+
+const tableCreationQuery = `CREATE TABLE IF NOT EXISTS products
+(
+	id SERIAL,
+	name TEXT NOT NULL,
+	price NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+	CONSTRAINT products_pkey PRIMARY KEY (id)
+)`
 
 func executeRequest(req *http.Request) *httptest.ResponseRecorder {
 	rr := httptest.NewRecorder()
@@ -49,136 +185,12 @@ func checkResponseCode(t *testing.T, expected, actual int) {
 	}
 }
 
-func addArticles(count int) {
+func addProducts(count int) {
 	if count < 1 {
-		count = 1
+			count = 1
 	}
 
 	for i := 0; i < count; i++ {
-		article := Article{Title: "Title" + strconv.Itoa(i), Description: "Description" + strconv.Itoa(i), Content: "Content" + strconv.Itoa(i)}
-		a.DB.Create(&article)
+			a.DB.Exec("INSERT INTO products(name, price) VALUES($1, $2)", "Product "+strconv.Itoa(i), (i+1.0)*10)
 	}
-}
-
-func TestEmptyTable(t *testing.T) {
-	clearTable()
-
-	req, _ := http.NewRequest("GET", "/ds", nil)
-	response := executeRequest(req)
-
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	if body := response.Body.String(); body != "[]" {
-		t.Errorf("Expected an empty array. Got %s", body)
-	}
-}
-
-func TestGetNonExistentd(t *testing.T) {
-	clearTable()
-
-	req, _ := http.NewRequest("GET", "/ds/11", nil)
-	response := executeRequest(req)
-
-	checkResponseCode(t, http.StatusNotFound, response.Code)
-
-	var m map[string]string
-	json.Unmarshal(response.Body.Bytes(), &m)
-	if m["error"] != "Article not found" {
-		t.Errorf("Expected the 'error' key of the response to be set to 'Article not found'. Got '%s'", m["error"])
-	}
-}
-
-func TestCreateArticle(t *testing.T) {
-	clearTable()
-
-	var jsonStr = []byte(`{"title":"Some title", "description", "Some Desc", "content": "Some Content"}`)
-	req, _ := http.NewRequest("POST", "/articles", bytes.NewBuffer(jsonStr))
-	req.Header.Set("Content-Type", "application/json")
-
-	response := executeRequest(req)
-	checkResponseCode(t, http.StatusCreated, response.Code)
-
-	var m map[string]interface{}
-	json.Unmarshal(response.Body.Bytes(), &m)
-
-	if m["title"] != "Some Title" {
-		t.Errorf("Expected article title to be 'Some Title'. Got '%v'", m["title"])
-	}
-
-	if m["description"] != "Some Desc" {
-		t.Errorf("Expected article desc to be 'Some Desc'. Got '%v'", m["description"])
-	}
-
-	if m["content"] != "Some Content" {
-		t.Errorf("Expected article content to be 'Some Content'. Got '%v'", m["content"])
-	}
-
-	if m["id"] != 1.0 {
-		t.Errorf("Expected article ID to be '1'. Got '%v'", m["id"])
-	}
-}
-
-func TestGetArticle(t *testing.T) {
-	clearTable()
-	addArticles(1)
-
-	req, _ := http.NewRequest("GET", "/articles/1", nil)
-	response := executeRequest(req)
-
-	checkResponseCode(t, http.StatusOK, response.Code)
-}
-
-func TestUpdateArticle(t *testing.T) {
-	clearTable()
-	addArticles(1)
-
-	req, _ := http.NewRequest("GET", "/articles/1", nil)
-	response := executeRequest(req)
-	var originalArticle map[string]interface{}
-	json.Unmarshal(response.Body.Bytes(), &originalArticle)
-
-	var jsonStr = []byte(`{"title":"Updated title", "description", "Updated Description", "content": "Updated Content"}`)
-	req, _ = http.NewRequest("PUT", "/articles/1", bytes.NewBuffer(jsonStr))
-	req.Header.Set("Content-Type", "application/json")
-
-	response = executeRequest(req)
-
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	var m map[string]interface{}
-	json.Unmarshal(response.Body.Bytes(), &m)
-
-	if m["id"] != originalArticle["id"] {
-		t.Errorf("Expected the id to remain the same (%v). Got %v", originalArticle["id"], m["id"])
-	}
-
-	if m["title"] != "Updated Title" {
-		t.Errorf("Expected article title to be 'Updated Title'. Got '%v'", m["title"])
-	}
-
-	if m["description"] != "Updated Description" {
-		t.Errorf("Expected article desc to be 'Updated Description'. Got '%v'", m["description"])
-	}
-
-	if m["content"] != "Updated Content" {
-		t.Errorf("Expected article content to be 'Updated Content'. Got '%v'", m["content"])
-	}
-}
-
-func TestDeleteArticle(t *testing.T) {
-	clearTable()
-	addArticles(1)
-
-	req, _ := http.NewRequest("GET", "/articles/1", nil)
-	response := executeRequest(req)
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	req, _ = http.NewRequest("DELETE", "/articles/1", nil)
-	response = executeRequest(req)
-
-	checkResponseCode(t, http.StatusOK, response.Code)
-
-	req, _ = http.NewRequest("GET", "/articles/1", nil)
-	response = executeRequest(req)
-	checkResponseCode(t, http.StatusNotFound, response.Code)
 }
