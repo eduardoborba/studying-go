@@ -43,7 +43,7 @@ func TestEmptyTable(t *testing.T) {
 	checkResponseCode(t, http.StatusOK, response.Code)
 
 	if body := response.Body.String(); body != "[]" {
-			t.Errorf("Expected an empty array. Got %s", body)
+		t.Errorf("Expected an empty array. Got %s", body)
 	}
 }
 
@@ -58,7 +58,7 @@ func TestGetNonExistentProduct(t *testing.T) {
 	var m map[string]string
 	json.Unmarshal(response.Body.Bytes(), &m)
 	if m["error"] != "Product not found" {
-			t.Errorf("Expected the 'error' key of the response to be set to 'Product not found'. Got '%s'", m["error"])
+		t.Errorf("Expected the 'error' key of the response to be set to 'Product not found'. Got '%s'", m["error"])
 	}
 }
 
@@ -77,17 +77,17 @@ func TestCreateProduct(t *testing.T) {
 	json.Unmarshal(response.Body.Bytes(), &m)
 
 	if m["name"] != "test product" {
-			t.Errorf("Expected product name to be 'test product'. Got '%v'", m["name"])
+		t.Errorf("Expected product name to be 'test product'. Got '%v'", m["name"])
 	}
 
 	if m["price"] != 11.22 {
-			t.Errorf("Expected product price to be '11.22'. Got '%v'", m["price"])
+		t.Errorf("Expected product price to be '11.22'. Got '%v'", m["price"])
 	}
 
 	// the id is compared to 1.0 because JSON unmarshaling converts numbers to
 	// floats, when the target is a map[string]interface{}
 	if m["id"] != 1.0 {
-			t.Errorf("Expected product ID to be '1'. Got '%v'", m["id"])
+		t.Errorf("Expected product ID to be '1'. Got '%v'", m["id"])
 	}
 }
 
@@ -123,15 +123,15 @@ func TestUpdateProduct(t *testing.T) {
 	json.Unmarshal(response.Body.Bytes(), &m)
 
 	if m["id"] != originalProduct["id"] {
-			t.Errorf("Expected the id to remain the same (%v). Got %v", originalProduct["id"], m["id"])
+		t.Errorf("Expected the id to remain the same (%v). Got %v", originalProduct["id"], m["id"])
 	}
 
 	if m["name"] == originalProduct["name"] {
-			t.Errorf("Expected the name to change from '%v' to '%v'. Got '%v'", originalProduct["name"], m["name"], m["name"])
+		t.Errorf("Expected the name to change from '%v' to '%v'. Got '%v'", originalProduct["name"], m["name"], m["name"])
 	}
 
 	if m["price"] == originalProduct["price"] {
-			t.Errorf("Expected the price to change from '%v' to '%v'. Got '%v'", originalProduct["price"], m["price"], m["price"])
+		t.Errorf("Expected the price to change from '%v' to '%v'. Got '%v'", originalProduct["price"], m["price"], m["price"])
 	}
 }
 
@@ -187,10 +187,10 @@ func checkResponseCode(t *testing.T, expected, actual int) {
 
 func addProducts(count int) {
 	if count < 1 {
-			count = 1
+		count = 1
 	}
 
 	for i := 0; i < count; i++ {
-			a.DB.Exec("INSERT INTO products(name, price) VALUES($1, $2)", "Product "+strconv.Itoa(i), (i+1.0)*10)
+		a.DB.Exec("INSERT INTO products(name, price) VALUES($1, $2)", "Product "+strconv.Itoa(i), (i+1.0)*10)
 	}
 }
